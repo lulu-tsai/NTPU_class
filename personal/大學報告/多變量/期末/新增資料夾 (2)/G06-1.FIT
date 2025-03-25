@@ -1,0 +1,34 @@
+                             Degrees of Freedom = 453
+               Minimum Fit Function Chi-Square = 2570.27 (P = 0.0)
+       Normal Theory Weighted Least Squares Chi-Square = 3196.44 (P = 0.0)
+                Estimated Non-centrality Parameter (NCP) = 2743.44
+           90 Percent Confidence Interval for NCP = (2567.80 ; 2926.48)
+                        Minimum Fit Function Value = 5.87
+                Population Discrepancy Function Value (F0) = 6.26
+              90 Percent Confidence Interval for F0 = (5.86 ; 6.68)
+              Root Mean Square Error of Approximation (RMSEA) = 0.12
+             90 Percent Confidence Interval for RMSEA = (0.11 ; 0.12)
+               P-Value for Test of Close Fit (RMSEA < 0.05) = 0.00
+                  Expected Cross-Validation Index (ECVI) = 7.64
+             90 Percent Confidence Interval for ECVI = (7.24 ; 8.06)
+                         ECVI for Saturated Model = 2.41
+                       ECVI for Independence Model = 86.00
+     Chi-Square for Independence Model with 496 Degrees of Freedom = 37604.31
+                           Independence AIC = 37668.31
+                               Model AIC = 3346.44
+                             Saturated AIC = 1056.00
+                           Independence CAIC = 37831.02
+                               Model CAIC = 3727.78
+                             Saturated CAIC = 3740.62
+                          Normed Fit Index (NFI) = 0.93
+                        Non-Normed Fit Index (NNFI) = 0.94
+                     Parsimony Normed Fit Index (PNFI) = 0.85
+                        Comparative Fit Index (CFI) = 0.94
+                        Incremental Fit Index (IFI) = 0.94
+                         Relative Fit Index (RFI) = 0.93
+                             Critical N (CN) = 90.63
+                      Root Mean Square Residual (RMR) = 0.18
+                             Standardized RMR = 0.18
+                        Goodness of Fit Index (GFI) = 0.69
+                   Adjusted Goodness of Fit Index (AGFI) = 0.63
+                  Parsimony Goodness of Fit Index (PGFI) = 0.59

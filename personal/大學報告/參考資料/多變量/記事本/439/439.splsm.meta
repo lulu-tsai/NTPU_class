@@ -1,0 +1,45 @@
+<ModelFileSettings>
+   <settings.general locked="false" currentModelName="439.splsm" multigroupCalculationPossible="true"/>
+   <settings.data locked="false" algorithm="MEAN_REPLACEMENT" convergenceLevel="0" skipCompleteDataset="false" modelName="null"/>
+   <settings.algorithm.pls locked="false" innerModelDecoratorId="INNER_MODEL_DECORATOR_PATH_COEFFICIENTS" outerModelDecoratorId="OUTER_MODEL_DECORATOR_WEIGHT_AND_LOADING" constructDecoratorId="CONSTRUCT_DECORATOR_R_SQUARE" pathWeighting="NONE" weightingScheme="PATH" dataMetric="DATA_METRIC_1" maxIterations="300" stopCriterion="7" useLohmoellerMissingValueStyle="false">
+      <initialWeights class="java.util.ArrayList">
+         <initialWeight mv="A1" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="A2" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="A3" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="A4" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="A5" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="B1" lv="員工服務能力" weight="1.0"/>
+         <initialWeight mv="B2" lv="員工服務能力" weight="1.0"/>
+         <initialWeight mv="B3" lv="員工服務能力" weight="1.0"/>
+         <initialWeight mv="C1" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="C2" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="C3" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="D1" lv="員工服務能力" weight="1.0"/>
+         <initialWeight mv="D2" lv="員工服務能力" weight="1.0"/>
+         <initialWeight mv="D3" lv="員工服務能力" weight="1.0"/>
+         <initialWeight mv="E1" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="E2" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="E3" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="F1" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="F2" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="F3" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="G1" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="G2" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="H1" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="H2" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="I1" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="I2" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="I3" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="J1" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="J2" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="J3" lv="民眾等候情緒" weight="1.0"/>
+         <initialWeight mv="K1" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="K2" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="K3" lv="顧客滿意度" weight="1.0"/>
+         <initialWeight mv="K4" lv="顧客滿意度" weight="1.0"/>
+      </initialWeights>
+   </settings.algorithm.pls>
+   <settings.algorithm.plsc locked="false" connectAllLVsforInitialCalculation="false"/>
+   <settings.algorithm.bootstrapping locked="false" samples="500" confidenceIntervalMethod="PERCENTILE_BCA" significanceLevel="0.05" testType="TWO_TAILED" parallelProcessing="true" bootstrappingComplexity="BASIC_BOOTSTRAPPING"/>
+   <settings.algorithm.bootstrappingc locked="false" innerModelDecoratorId="pathCoefficientAndPValue" outerModelDecoratorId="outerModelAndPValue" pathWeighting="NONE"/>
+</ModelFileSettings>

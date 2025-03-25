@@ -1,0 +1,29 @@
+# 123
+
+```{R}
+x <- rnorm(20)
+print(x)
+print(R.home())
+```
+
++ 參與調查人數為 $n$ 
++ 擁有碩士學歷的人數為 $x$
++ 碩士比例為 $x/n$
+
+```{r}
+n <- 40; x <- 26 # 工程師總人數40人，26人為碩士(含)學歷以上
+alpha <- 0.05
+pihat <- x/n; pi0 <- 0.44
+```
+## 區間估計 (Confidence Interval)
+
++ Wald Test
+
+\[\hat{\pi}\pm
+z_{\alpha/2}\sqrt{\frac{\hat{\pi}(1-\hat{\pi})}{n}}.\]
+
+```{r}
+lb <- pihat + qnorm(alpha/2)*sqrt(pihat*(1-pihat)/n) 
+ub <- pihat + qnorm(1-alpha/2)*sqrt(pihat*(1-pihat)/n) 
+cat("Wald 95% CI is [", lb, ub, "]\n")
+```
