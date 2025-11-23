@@ -21,7 +21,7 @@ from selenium.webdriver.support import expected_conditions as EC
 DB_FILE = "/Users/lulutsai/Documents/NTPU_class/paper/code/mobile01_clawler/ntpu_paper.sqlite"
 
 # === 控制今日爬取筆數 ===
-LIMIT_COUNT = 50  # ← 想爬幾筆就改這裡
+LIMIT_COUNT = 100  # ← 想爬幾筆就改這裡
 
 # === 建立資料表（若不存在） ===
 def init_db():
