@@ -112,6 +112,7 @@ def scrape_mobile01(keyword, max_pages=5, start_page=1):
                 if link and "topicdetail.php" in link and link not in seen_links:
                     seen_links.add(link)
                     unique_articles.append((title, link))
+            time.sleep(10)
         except Exception as e:
             print(f"⚠️ 抓取失敗：{e}")
             break
@@ -163,26 +164,38 @@ def scrape_mobile01(keyword, max_pages=5, start_page=1):
     driver.quit()
     return unique_articles
 
+# keywords = [
+#     "情緒勒索",
+#     "情緒控制",
+#     "情緒綁架",
+#     "冷暴力",
+#     "PUA",
+#     "精神控制",
+#     "操控關係",
+#     "道德綁架",
+#     "控制慾",
+#     "有毒關係",
+#     "操控型人格",
+#     "情感勒索",
+#     "情勒"
+# ]
 keywords = [
-    "情緒勒索",
-    "情緒控制",
-    "情緒綁架",
-    "冷暴力",
-    "PUA",
-    "精神控制",
-    "操控關係",
-    "道德綁架",
-    "控制慾",
-    "有毒關係",
-    "操控型人格",
-    "情感勒索",
-    "情勒"
+    "開心",
+    "幸福",
+    "正能量",
+    "遊戲",
+    "音樂",
+    "運動",
+    "美食",
+    "旅遊",
+    "電影"
 ]
+
 
 # === 主程式 ===
 if __name__ == "__main__":
-    keyword = keywords[12]
-    has_emotional_abuse = 1 # 這個要記得input 看他的關鍵字是否跟情緒勒索有關
+    keyword = keywords[8]
+    has_emotional_abuse = 0 # 這個要記得input 看他的關鍵字是否跟情緒勒索有關
     articles = scrape_mobile01(keyword, max_pages=10)
 
     print(f"✅ 共抓到 {len(articles)} 篇文章，準備寫入資料庫...")
