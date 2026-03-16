@@ -1,0 +1,146 @@
+一、資料表總覽（Tables Overview）
+資料表名稱	分析層級	主要用途
+links	主題層級	爬蟲候選主題、關鍵字來源、弱監督標記
+articles	主文（Level 1）	主文全文與結構性特徵
+article_comments	留言（Level 2）	留言原始文字資料
+eb_evaluation	主文 / 留言	LLM 產生之情緒勒索策略與分數
+sqlite_sequence	系統	SQLite 自增序號（不納入分析）
+
+二、資料表說明
+1️⃣ links（主題連結與弱標記來源）
+
+用途說明
+links 為研究資料蒐集之起點，用於記錄透過關鍵字搜尋所取得之 Mobile01 主題連結，並作為主文層級分類任務之弱監督標籤來源。
+
+欄位說明
+
+欄位名稱	說明
+id	連結唯一識別碼
+url	Mobile01 主題網址
+title	主題標題
+description	搜尋來源描述
+crawl_time	爬取時間
+keyword	使用之搜尋關鍵字
+has_emotional_abuse	是否包含情緒勒索關鍵字（0/1，弱標記）
+status	爬蟲處理狀態
+
+📌 研究中之角色
+
+作為 主文分類任務之目標變數（y）
+
+屬於 規則式（rule-based）弱監督標記
+
+2️⃣ articles（主文資料表，Level 1）
+
+用途說明
+articles 為本研究之「主文分析核心資料表」，包含主文全文、發文時間與基本結構性特徵，為文字表示與分類模型之主要輸入來源。
+
+欄位說明
+
+欄位名稱	說明
+id	主文唯一識別碼
+link_id	對應 links.id
+url	主文網址
+title	主文標題
+post_time	發文時間（原始時間格式）
+content	主文全文（未斷詞）
+word_count	主文字數
+replies	留言摘要文字（爬蟲原始欄位，不建議作為模型輸入）
+reply_count	留言總數
+created_at	資料寫入時間
+pua_status	主文處理狀態
+pua_status_reason	狀態補充說明
+
+📌 研究中之角色
+
+X（文字特徵）：content、title
+
+結構性變數（控制變數）：word_count、reply_count
+
+分析層級：Level 1（主文）
+
+⚠️ 重要註記（方法論）
+replies 欄位包含留言文字，與主文分析任務之目標高度相關，為避免資料洩漏（data leakage），不納入任何模型訓練或特徵工程。
+
+3️⃣ article_comments（留言資料表，Level 2）
+
+用途說明
+記錄每篇主文底下之使用者留言，作為留言層級情緒勒索分析與分類之基礎資料。
+
+欄位說明
+
+欄位名稱	說明
+id	留言唯一識別碼
+link_id	對應 links.id
+article_id	對應 articles.id
+comment_index	留言排序序號
+comment_text	留言全文
+pua_status	留言處理狀態
+pua_status_reason	狀態補充說明
+
+📌 研究中之角色
+
+上一階段研究之主要分析單位
+
+分析層級：Level 2（留言）
+
+4️⃣ eb_evaluation（LLM 評分與標註結果）
+
+用途說明
+本表儲存透過大型語言模型（結合 RAG 與知識庫）對主文與留言進行情緒勒索相關評分與策略分類之結果。
+
+欄位說明（重點）
+
+類型	欄位
+關聯鍵	link_id, article_id, comment_id
+層級識別	level（1=主文，2=留言）
+策略構面	strategy_power, strategy_emotion, strategy_blame
+FOG 構面	score_fear, score_obligation, score_guilt
+整體評分	score_overall
+主策略	main_strategy, main_strategy_detail
+信心分數	confidence
+模型資訊	model_name, model_version, knowledge_base
+時間	created_at
+
+📌 層級判斷規則
+
+主文評分：level = 1 且 comment_id IS NULL
+
+留言評分：level = 2 且 comment_id IS NOT NULL
+
+三、資料關聯（ERD 文字版）
+links (1)
+ ├── articles (1)
+ │    └── article_comments (N)
+ │         └── eb_evaluation (Level 2)
+ └── eb_evaluation (Level 1)
+
+四、研究中任務對應（你這次的主文分析）
+主文分類任務設定
+
+分析單位：主文（articles）
+
+X：content（斷詞 × 表示法）
+
+y：links.has_emotional_abuse
+
+方法：
+
+斷詞：jieba / CKIP
+
+表示法：TF-IDF / Word2Vec(mean) / fastText(mean)
+
+分類器：Logistic Regression（固定）
+
+📌 本任務屬於 弱監督文本分類（weakly-supervised text classification）。
+
+五、備註（我之後會這樣理解你的資料）
+
+主文與留言為 不同層級、不同任務
+
+links.has_emotional_abuse ≠ 心理學真實標註，而是「可辨識性任務之 proxy」
+
+LLM 標註結果（eb_evaluation）主要用於 描述性分析與層級比較
+
+
+其實我們要釐清一個點 我的關鍵字表示我的文章是藉由關鍵字去下的 我好像也不能保證那篇文章有情緒勒索

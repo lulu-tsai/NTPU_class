@@ -1,0 +1,510 @@
+
+# 2
+import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties  
+winfont01 = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=12) 
+winfont02 = FontProperties(fname=r"c:\windows\fonts\kaiu.ttf", size=12) 
+
+plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']  # 設定字型為微軟正黑體
+plt.rcParams['axes.unicode_minus'] = False                # 解決負號顯示問題
+
+macfont = FontProperties(fname="/Library/Fonts/Arial Unicode.ttf", size=10) 
+
+# 3
+import sqlite3
+import pandas as pd
+
+DB_FILE = r"D:/NTPU_class/paper/code/mobile01_clawler/ntpu_paper.sqlite"
+
+sql = """
+WITH latest AS (
+  SELECT
+    article_id,
+    MAX(created_at) AS max_created_at
+  FROM eb_annotations
+  WHERE level = 1
+    AND article_id IS NOT NULL
+  GROUP BY article_id
+)
+SELECT
+  a.id          AS article_id,
+  a.link_id     AS link_id,
+  a.url         AS url,
+  a.title       AS title,
+  a.post_time   AS post_time,
+  a.content     AS content,
+  a.word_count  AS word_count,
+  a.reply_count AS reply_count,
+
+  l.keyword     AS keyword,
+  l.has_emotional_abuse AS y_rule,  -- 你原本 links 裡的規則標註（如果還在用）
+
+  -- ✅ 來自 eb_annotations（LLM/規則/分數）
+  e.score_overall         AS y_llm_score,         -- 0~5
+  e.confidence            AS llm_confidence,      -- 0~1（整體分析信心）
+  e.is_eb_rule            AS y_rule_calc,         -- 0/1（你 calc_is_eb 的規則式判定）
+  e.is_eb_llm             AS y_llm,               -- 0/1（LLM 二元判定）
+  e.is_eb_llm_confidence  AS y_llm_confidence,    -- 0~1（LLM 二元信心）
+
+  e.main_strategy,
+  e.main_strategy_detail,
+  e.pua_source,
+
+  e.model_name,
+  e.model_version,
+  e.knowledge_base,
+  e.created_at            AS anno_created_at
+FROM articles a
+JOIN links l
+  ON a.link_id = l.id
+LEFT JOIN latest t
+  ON a.id = t.article_id
+LEFT JOIN eb_annotations e
+  ON e.article_id = t.article_id
+ AND e.created_at = t.max_created_at
+ AND e.level = 1
+WHERE a.content IS NOT NULL
+  AND TRIM(a.content) <> '';
+"""
+
+with sqlite3.connect(DB_FILE) as conn:
+    df = pd.read_sql_query(sql, conn)
+
+df.head()
+
+# 5
+import pandas as pd
+import numpy as np
+
+# 先複製
+dfm = df.copy()
+
+# 基本清理
+dfm["y_rule"] = dfm["y_rule"].astype(int)
+dfm["y_llm"] = pd.to_numeric(dfm["y_llm"], errors="coerce")
+
+# ✅ 刪除未評分（y_llm 為 NaN）
+before = len(dfm)
+dfm = dfm.dropna(subset=["y_llm"]).reset_index(drop=True)
+after = len(dfm)
+
+before, after
+
+# 7
+ct = pd.crosstab(dfm["y_rule"], dfm["y_llm"], rownames=["y_rule"], colnames=["y_llm"], margins=True)
+ct
+
+# 9
+import os, re, io, time, contextlib
+import numpy as np
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, average_precision_score
+
+# ===== optional: xgboost =====
+try:
+    from xgboost import XGBClassifier
+    HAS_XGB = True
+except Exception:
+    HAS_XGB = False
+
+# ===== Parameters (you can tune) =====
+RANDOM_SEED = 42
+TEST_SIZE = 0.2
+
+Y_RAW_COL = "y_llm"          # 原始評分欄位
+TEXT_COL  = "content"        # 主文文字欄位（留言就改 comment_text）
+
+THRESHOLD = 3                # y_llm_bin：>=3 -> 1
+N_WORKERS = max(1, (os.cpu_count() or 4) - 1)
+
+TFIDF_MAX_FEATURES = 20000
+TFIDF_MIN_DF = 5
+TFIDF_NGRAM = (1, 2)
+
+SVD_DIM = 300                # TF-IDF 給 SVM/RF/XGB 用
+EMB_DIM = 200                # w2v / fastText mean 維度
+W2V_EPOCHS = 10
+FT_EPOCHS  = 10
+
+# 10
+#  STEP 1｜斷詞函式（jieba + CKIP）
+import jieba
+
+def normalize_text(text: str) -> str:
+    if text is None:
+        return ""
+    return re.sub(r"\s+", " ", str(text)).strip()
+
+def tokenize_jieba(text: str):
+    text = normalize_text(text)
+    if not text:
+        return []
+    return [t for t in jieba.cut(text, cut_all=False) if t.strip()]
+
+_CKIP_WS = None
+def get_ckip_ws():
+    global _CKIP_WS
+    if _CKIP_WS is None:
+        from ckip_transformers.nlp import CkipWordSegmenter
+        f_out, f_err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(f_out), contextlib.redirect_stderr(f_err):
+            _CKIP_WS = CkipWordSegmenter(model="bert-base")
+    return _CKIP_WS
+
+def tokenize_ckip(text: str):
+    text = normalize_text(text)
+    if not text:
+        return []
+    ws = get_ckip_ws()
+    f_out, f_err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(f_out), contextlib.redirect_stderr(f_err):
+        tokens = ws([text])[0]
+    return [t for t in tokens if t.strip()]
+
+# 11
+# STEP 2｜Utility: timing + metrics
+def timed(fn, *args, **kwargs):
+    t0 = time.perf_counter()
+    out = fn(*args, **kwargs)
+    return out, (time.perf_counter() - t0)
+
+def eval_binary(y_true, pred, score):
+    return {
+        "acc": accuracy_score(y_true, pred),
+        "f1": f1_score(y_true, pred),
+        "roc_auc": roc_auc_score(y_true, score) if score is not None else np.nan,
+        "pr_auc": average_precision_score(y_true, score) if score is not None else np.nan,
+    }
+
+# 12
+# STEP 3｜資料定版：刪未評分 + 建 y
+def prepare_dfm(df: pd.DataFrame,
+                text_col=TEXT_COL,
+                y_col="y_llm") -> pd.DataFrame:
+    dfm = df.copy()
+    dfm = dfm.dropna(subset=[y_col])
+    dfm[text_col] = dfm[text_col].astype(str)
+
+    # 保證是 0/1 int
+    dfm[y_col] = pd.to_numeric(dfm[y_col], errors="coerce")
+    dfm = dfm.dropna(subset=[y_col])
+    dfm[y_col] = dfm[y_col].astype(int)
+    return dfm
+
+# 13
+# STEP 4｜固定切分（df_train/df_test）
+def split_df(dfm: pd.DataFrame, test_size=TEST_SIZE, seed=RANDOM_SEED):
+    df_train, df_test = train_test_split(
+        dfm,
+        test_size=test_size,
+        random_state=seed,
+        stratify=dfm["y_llm"]
+    )
+    y_train = df_train["y_llm"].values
+    y_test  = df_test["y_llm"].values
+    return df_train, df_test, y_train, y_test
+
+# 14
+# STEP 4｜特徵工程（TF-IDF / w2v(mean) / fastText(mean)）
+def make_tokens(df, text_col, tokenizer):
+    return [tokenizer(t) for t in df[text_col].astype(str).tolist()]
+
+def tokens_to_corpus(tokens):
+    return [" ".join(t) for t in tokens]
+
+def tfidf_train_test_from_tokens(tokens_tr, tokens_te,
+                                 max_features=TFIDF_MAX_FEATURES,
+                                 min_df=TFIDF_MIN_DF,
+                                 ngram_range=TFIDF_NGRAM):
+    corpus_tr = tokens_to_corpus(tokens_tr)
+    corpus_te = tokens_to_corpus(tokens_te)
+
+    vec = TfidfVectorizer(
+        max_features=max_features,
+        min_df=min_df,
+        ngram_range=ngram_range,
+        dtype=np.float32
+    )
+    Xtr = vec.fit_transform(corpus_tr)
+    Xte = vec.transform(corpus_te)
+    return Xtr, Xte, vec
+
+def mean_pool(tokens_list, wv, vector_size):
+    X = np.zeros((len(tokens_list), vector_size), dtype=np.float32)
+    cov = []
+    for i, toks in enumerate(tokens_list):
+        vecs = [wv[w] for w in toks if w in wv]
+        if vecs:
+            X[i] = np.mean(vecs, axis=0)
+            cov.append(len(vecs) / max(len(toks), 1))
+        else:
+            cov.append(0.0)
+    return X, float(np.mean(cov))
+
+def w2v_mean_train_test(tokens_tr, tokens_te,
+                        vector_size=EMB_DIM, window=5, min_count=2,
+                        workers=N_WORKERS, epochs=W2V_EPOCHS):
+    from gensim.models import Word2Vec
+    model = Word2Vec(
+        sentences=tokens_tr,
+        vector_size=vector_size,
+        window=window,
+        min_count=min_count,
+        workers=workers
+    )
+    model.train(tokens_tr, total_examples=len(tokens_tr), epochs=epochs)
+    Xtr, cov_tr = mean_pool(tokens_tr, model.wv, vector_size)
+    Xte, cov_te = mean_pool(tokens_te, model.wv, vector_size)
+    return Xtr, Xte, cov_tr, cov_te
+
+def ft_mean_train_test(tokens_tr, tokens_te,
+                       vector_size=EMB_DIM, window=5, min_count=2,
+                       workers=N_WORKERS, epochs=FT_EPOCHS):
+    from gensim.models import FastText
+    model = FastText(
+        sentences=tokens_tr,
+        vector_size=vector_size,
+        window=window,
+        min_count=min_count,
+        workers=workers
+    )
+    model.train(tokens_tr, total_examples=len(tokens_tr), epochs=epochs)
+    Xtr, cov_tr = mean_pool(tokens_tr, model.wv, vector_size)
+    Xte, cov_te = mean_pool(tokens_te, model.wv, vector_size)
+    return Xtr, Xte, cov_tr, cov_te
+
+# 15
+# STEP 5｜模型清單（LR / SVM-RBF / SVM-Poly / RF / XGB / MLP）
+def build_models(seed=RANDOM_SEED):
+    models = {}
+
+    models["lr"] = LogisticRegression(max_iter=2000, solver="liblinear", class_weight="balanced")
+
+    models["svm_rbf"] = SVC(kernel="rbf", probability=True, class_weight="balanced")
+    models["svm_poly"] = SVC(kernel="poly", degree=3, probability=True, class_weight="balanced")
+
+    models["rf"] = RandomForestClassifier(
+        n_estimators=600, random_state=seed, n_jobs=-1,
+        class_weight="balanced_subsample"
+    )
+
+    if HAS_XGB:
+        models["xgb"] = XGBClassifier(
+            n_estimators=600,
+            max_depth=6,
+            learning_rate=0.08,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_lambda=1.0,
+            objective="binary:logistic",
+            eval_metric="logloss",
+            random_state=seed,
+            n_jobs=-1
+        )
+
+    models["mlp"] = MLPClassifier(
+        hidden_layer_sizes=(128, 64),
+        activation="relu",
+        alpha=1e-4,
+        learning_rate_init=1e-3,
+        max_iter=40,
+        early_stopping=True,
+        random_state=seed
+    )
+
+    return models
+
+# 16
+# STEP 6｜評估函式（acc/f1/ROC-AUC/PR-AUC + train/test time）
+def fit_eval(model, Xtr, Xte, ytr, yte, need_scale=False):
+    # ---- train ----
+    t0 = time.perf_counter()
+
+    if need_scale:
+        pipe = Pipeline([("scaler", StandardScaler()), ("clf", model)])
+        pipe.fit(Xtr, ytr)
+        train_sec = time.perf_counter() - t0
+
+        # ---- test predict ----
+        t1 = time.perf_counter()
+        pred = pipe.predict(Xte)
+        score = pipe.predict_proba(Xte)[:, 1] if hasattr(pipe, "predict_proba") else None
+        test_pred_sec = time.perf_counter() - t1
+
+    else:
+        model.fit(Xtr, ytr)
+        train_sec = time.perf_counter() - t0
+
+        t1 = time.perf_counter()
+        pred = model.predict(Xte)
+        score = model.predict_proba(Xte)[:, 1] if hasattr(model, "predict_proba") else None
+        test_pred_sec = time.perf_counter() - t1
+
+    met = eval_binary(yte, pred, score)
+    met["train_sec"] = train_sec
+    met["test_pred_sec"] = test_pred_sec
+    return met
+
+# 17
+# STEP 7｜主控：跑「全部組合矩陣」
+def run_full_matrix(df_train, df_test, y_train, y_test,
+                    text_col=TEXT_COL,
+                    tokenize_map=None,
+                    svd_dim=SVD_DIM,
+                    seed=RANDOM_SEED):
+
+    if tokenize_map is None:
+        tokenize_map = {
+            "jieba": tokenize_jieba,
+            "ckip": tokenize_ckip
+        }
+
+    models = build_models(seed=seed)
+    rows = []
+
+    all_model_names = ["lr", "svm_rbf", "svm_poly", "rf", "mlp"] + (["xgb"] if "xgb" in models else [])
+
+    for tok_name, tok_fn in tokenize_map.items():
+
+        # ---- A) tokenize cache ----
+        (tok_tr, tok_te), prep_sec = timed(
+            lambda: (make_tokens(df_train, text_col, tok_fn),
+                     make_tokens(df_test,  text_col, tok_fn))
+        )
+
+        # ---- B) TF-IDF ----
+        (Xtr_tfidf, Xte_tfidf, _), tfidf_sec = timed(tfidf_train_test_from_tokens, tok_tr, tok_te)
+
+        # TF-IDF：LR 用 sparse
+        met = fit_eval(models["lr"], Xtr_tfidf, Xte_tfidf, y_train, y_test, need_scale=False)
+        rows.append({
+            "tokenizer": tok_name, "repr": "tfidf", "model": "lr",
+            "prep_sec": prep_sec, "feat_sec": tfidf_sec, **met
+        })
+
+        # TF-IDF：其他模型走 SVD dense
+        svd = TruncatedSVD(n_components=svd_dim, random_state=seed)
+        t0 = time.perf_counter()
+        Xtr_svd = svd.fit_transform(Xtr_tfidf)
+        Xte_svd = svd.transform(Xte_tfidf)
+        svd_sec = time.perf_counter() - t0
+
+        for mname in [m for m in all_model_names if m != "lr"]:
+            need_scale = (mname.startswith("svm") or mname in ["mlp"])
+            met = fit_eval(models[mname], Xtr_svd, Xte_svd, y_train, y_test, need_scale=need_scale)
+            rows.append({
+                "tokenizer": tok_name,
+                "repr": f"tfidf_svd{svd_dim}",
+                "model": mname,
+                "prep_sec": prep_sec,
+                "feat_sec": (tfidf_sec + svd_sec),
+                **met
+            })
+
+        # ---- C) Word2Vec(mean) ----
+        (Xtr_w2v, Xte_w2v, cov_tr, cov_te), w2v_sec = timed(w2v_mean_train_test, tok_tr, tok_te)
+
+        for mname in all_model_names:
+            need_scale = (mname.startswith("svm") or mname in ["lr", "mlp"])
+            met = fit_eval(models[mname], Xtr_w2v, Xte_w2v, y_train, y_test, need_scale=need_scale)
+            rows.append({
+                "tokenizer": tok_name, "repr": "w2v_mean", "model": mname,
+                "cov_train": cov_tr, "cov_test": cov_te,
+                "prep_sec": prep_sec, "feat_sec": w2v_sec, **met
+            })
+
+        # ---- D) fastText(mean) ----
+        (Xtr_ft, Xte_ft, cov_tr, cov_te), ft_sec = timed(ft_mean_train_test, tok_tr, tok_te)
+
+        for mname in all_model_names:
+            need_scale = (mname.startswith("svm") or mname in ["lr", "mlp"])
+            met = fit_eval(models[mname], Xtr_ft, Xte_ft, y_train, y_test, need_scale=need_scale)
+            rows.append({
+                "tokenizer": tok_name, "repr": "fasttext_mean", "model": mname,
+                "cov_train": cov_tr, "cov_test": cov_te,
+                "prep_sec": prep_sec, "feat_sec": ft_sec, **met
+            })
+
+    res = pd.DataFrame(rows)
+
+    # total time = tokenize + feature + train + test_pred
+    if "test_pred_sec" in res.columns:
+        res["total_sec"] = (res["prep_sec"] + res["feat_sec"] + res["train_sec"] + res["test_pred_sec"]).astype(float)
+    else:
+        # fallback（如果你還沒升級 fit_eval）
+        res["total_sec"] = (res["prep_sec"] + res["feat_sec"] + res["train_sec"]).astype(float)
+
+    # round
+    for c in ["acc","f1","roc_auc","pr_auc","prep_sec","feat_sec","train_sec","test_pred_sec","total_sec","cov_train","cov_test"]:
+        if c in res.columns:
+            res[c] = res[c].astype(float).round(3)
+
+    # sort
+    sort_cols = [c for c in ["roc_auc","pr_auc","f1"] if c in res.columns]
+    res = res.sort_values(sort_cols, ascending=False).reset_index(drop=True)
+    return res
+
+# 18
+# main
+# STEP A：準備 dfm
+dfm = prepare_dfm(df, text_col=TEXT_COL, y_col="y_llm")
+dfm["y_llm"].value_counts()
+
+# STEP B：切分
+df_train, df_test, y_train, y_test = split_df(dfm, test_size=TEST_SIZE, seed=RANDOM_SEED)
+
+# STEP C：先只跑 jieba（快確認流程）
+tokenize_map = {"jieba": tokenize_jieba}
+df_res_jieba = run_full_matrix(df_train, df_test, y_train, y_test, text_col=TEXT_COL, tokenize_map=tokenize_map)
+df_res_jieba.head(20)
+
+# STEP D：再加 CKIP（完整跑）
+tokenize_map = {
+    "jieba": tokenize_jieba, 
+    "ckip": tokenize_ckip
+    }
+# tokenizer × repr × model
+df_res = run_full_matrix(df_train, df_test, y_train, y_test, text_col=TEXT_COL, tokenize_map=tokenize_map)
+df_res.head(30)
+
+# 21
+def output_final_table(df_res, top_n=30):
+    out = df_res.copy()
+
+    # === 定義你這次報告用的時間 ===
+    out["train_time"] = out["prep_sec"] + out["feat_sec"] + out["train_sec"]
+    out["test_time"]  = out["prep_sec"] + out["feat_sec"] + out["test_pred_sec"]
+
+    cols = [
+        "tokenizer", "repr", "model",
+        "pr_auc", "roc_auc",
+        "train_time", "test_time"
+    ]
+    cols = [c for c in cols if c in out.columns]
+
+    out = out[cols]
+    out = out.sort_values("pr_auc", ascending=False).head(top_n).reset_index(drop=True)
+
+    # 四捨五入，好看
+    for c in ["pr_auc", "roc_auc", "train_time", "test_time"]:
+        if c in out.columns:
+            out[c] = out[c].astype(float).round(3)
+
+    return out
+
+df_report = output_final_table(df_res, top_n=20)
+df_report
+
+# 輸出單位 秒（seconds）
